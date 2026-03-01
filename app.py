@@ -1,12 +1,10 @@
-from flask import Flask, render_template, request, redirect, session
+from flask import Flask, render_template, request, redirect
 import os
 import psycopg2
 from urllib.parse import urlparse
 from datetime import datetime
-from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
-app.secret_key = "super_secret_key"
 
 # =============================
 # CONEXÃO POSTGRESQL (RENDER)
@@ -25,33 +23,7 @@ conn = psycopg2.connect(
 cursor = conn.cursor()
 
 # =============================
-# CRIAR TABELA USUARIOS
-# =============================
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS usuarios (
-    id SERIAL PRIMARY KEY,
-    usuario TEXT UNIQUE NOT NULL,
-    senha TEXT NOT NULL
-)
-""")
-
-conn.commit()
-
-# =============================
-# CRIAR ADMIN PADRÃO
-# =============================
-senha_hash = generate_password_hash("1234")
-
-cursor.execute("""
-INSERT INTO usuarios (usuario, senha)
-VALUES (%s, %s)
-ON CONFLICT (usuario) DO NOTHING
-""", ("admin", senha_hash))
-
-conn.commit()
-
-# =============================
-# CRIAR OUTRAS TABELAS
+# CRIAR TABELAS
 # =============================
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS servicos (
@@ -80,84 +52,10 @@ CREATE TABLE IF NOT EXISTS agendamentos (
 conn.commit()
 
 # =============================
-# LOGIN
-# =============================
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    if request.method == "POST":
-        usuario = request.form["usuario"]
-        senha = request.form["senha"]
-
-        cursor.execute("""
-            SELECT id, usuario, senha
-            FROM usuarios
-            WHERE usuario = %s
-        """, (usuario,))
-
-        user = cursor.fetchone()
-
-        if user and check_password_hash(user[2], senha):
-            session["logado"] = True
-            session["usuario"] = usuario
-            return redirect("/")
-        else:
-            return "Login inválido"
-
-    return """
-    <h2>Login</h2>
-    <form method="POST">
-        Usuário: <input name="usuario" required><br><br>
-        Senha: <input type="password" name="senha" required><br><br>
-        <button type="submit">Entrar</button>
-    </form>
-    """
-
-# =============================
-# LOGOUT
-# =============================
-@app.route("/logout")
-def logout():
-    session.clear()
-    return redirect("/login")
-
-# =============================
-# REGISTRAR (opcional)
-# =============================
-@app.route("/registrar", methods=["GET", "POST"])
-def registrar():
-    if request.method == "POST":
-        usuario = request.form["usuario"]
-        senha = request.form["senha"]
-
-        senha_hash = generate_password_hash(senha)
-
-        cursor.execute("""
-            INSERT INTO usuarios (usuario, senha)
-            VALUES (%s, %s)
-            ON CONFLICT (usuario) DO NOTHING
-        """, (usuario, senha_hash))
-
-        conn.commit()
-
-        return "<h3>Usuário criado!</h3><a href='/login'>Ir para login</a>"
-
-    return """
-    <h2>Criar Usuário</h2>
-    <form method="POST">
-        Usuário: <input name="usuario" required><br><br>
-        Senha: <input type="password" name="senha" required><br><br>
-        <button type="submit">Criar</button>
-    </form>
-    """
-
-# =============================
 # HOME
 # =============================
 @app.route("/")
 def index():
-    if "logado" not in session:
-        return redirect("/login")
-
     cursor.execute("SELECT * FROM servicos ORDER BY id DESC")
     servicos = cursor.fetchall()
 
@@ -173,9 +71,6 @@ def index():
 # =============================
 @app.route("/agendar", methods=["GET", "POST"])
 def agendar():
-    if "logado" not in session:
-        return redirect("/login")
-
     if request.method == "POST":
         cliente = request.form["cliente"]
         veiculo = request.form["veiculo"]
@@ -196,13 +91,10 @@ def agendar():
     return render_template("agendar.html")
 
 # =============================
-# AGENDA
+# AGENDA (FULLCALENDAR)
 # =============================
 @app.route("/agenda")
 def agenda():
-    if "logado" not in session:
-        return redirect("/login")
-
     cursor.execute("""
         SELECT id, cliente, servico, data, hora, status
         FROM agendamentos
@@ -222,13 +114,10 @@ def agenda():
     return render_template("agenda.html", eventos=eventos)
 
 # =============================
-# CONCLUIR
+# CONCLUIR SERVIÇO
 # =============================
 @app.route("/concluir/<int:id>")
 def concluir(id):
-    if "logado" not in session:
-        return redirect("/login")
-
     cursor.execute("""
         SELECT cliente, veiculo, servico, valor
         FROM agendamentos
