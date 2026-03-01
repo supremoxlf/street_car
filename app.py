@@ -1,51 +1,75 @@
 from flask import Flask, render_template, request, redirect
-import sqlite3
+import os
+import psycopg2
+from urllib.parse import urlparse
 from datetime import datetime
-import requests
-
-# PDF
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib.units import inch
 
 app = Flask(__name__)
 
 # =============================
-# CRIAR BANCO AUTOMATICAMENTE
+# FUNÇÃO DE CONEXÃO (ESTÁVEL)
 # =============================
-def criar_banco():
-    conn = sqlite3.connect("streetcar.db")
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS servicos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            cliente TEXT,
-            veiculo TEXT,
-            servico TEXT,
-            data TEXT,
-            valor REAL
-        )
-    """)
-    conn.commit()
-    conn.close()
+def get_connection():
+    DATABASE_URL = os.environ.get("DATABASE_URL")
+    url = urlparse(DATABASE_URL)
 
-criar_banco()
+    return psycopg2.connect(
+        database=url.path[1:],
+        user=url.username,
+        password=url.password,
+        host=url.hostname,
+        port=url.port
+    )
 
 # =============================
-# PAGINA PRINCIPAL
+# CRIAR TABELAS (1 VEZ)
+# =============================
+conn = get_connection()
+cursor = conn.cursor()
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS servicos (
+    id SERIAL PRIMARY KEY,
+    cliente TEXT,
+    veiculo TEXT,
+    servico TEXT,
+    data TEXT,
+    valor REAL
+)
+""")
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS agendamentos (
+    id SERIAL PRIMARY KEY,
+    cliente TEXT,
+    veiculo TEXT,
+    servico TEXT,
+    data DATE,
+    hora TIME,
+    valor REAL,
+    status TEXT DEFAULT 'Agendado'
+)
+""")
+
+conn.commit()
+cursor.close()
+conn.close()
+
+# =============================
+# HOME
 # =============================
 @app.route("/")
 def index():
-    conn = sqlite3.connect("streetcar.db")
+    conn = get_connection()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT * FROM servicos")
+    cursor.execute("SELECT * FROM servicos ORDER BY id DESC")
     servicos = cursor.fetchall()
 
-    cursor.execute("SELECT SUM(valor) FROM servicos")
+    cursor.execute("SELECT COALESCE(SUM(valor),0) FROM servicos")
     faturamento = cursor.fetchone()[0]
-    faturamento = faturamento if faturamento else 0
 
+    cursor.close()
     conn.close()
 
     return render_template("index.html",
@@ -53,129 +77,101 @@ def index():
                            faturamento=faturamento)
 
 # =============================
-# ADICIONAR SERVIÇO
+# AGENDAR
 # =============================
-@app.route("/adicionar", methods=["POST"])
-def adicionar():
-    cliente = request.form["cliente"]
-    veiculo = request.form["veiculo"]
-    servico = request.form["servico"]
-    valor = float(request.form["valor"])
-    numero = request.form["numero"]
-    data = datetime.now().strftime("%d/%m/%Y")
+@app.route("/agendar", methods=["GET", "POST"])
+def agendar():
+    if request.method == "POST":
+        cliente = request.form["cliente"]
+        veiculo = request.form["veiculo"]
+        servico = request.form["servico"]
+        valor = float(request.form["valor"])
+        data = request.form["data"]
+        hora = request.form["hora"]
 
-    conn = sqlite3.connect("streetcar.db")
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            INSERT INTO agendamentos
+            (cliente, veiculo, servico, data, hora, valor)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (cliente, veiculo, servico, data, hora, valor))
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return redirect("/agenda")
+
+    return render_template("agendar.html")
+
+# =============================
+# AGENDA
+# =============================
+@app.route("/agenda")
+def agenda():
+    conn = get_connection()
     cursor = conn.cursor()
 
     cursor.execute("""
-        INSERT INTO servicos (cliente, veiculo, servico, data, valor)
-        VALUES (?, ?, ?, ?, ?)
-    """, (cliente, veiculo, servico, data, valor))
-
-    conn.commit()
-    conn.close()
-
-    # =============================
-    # WHATSAPP BUSINESS API
-    # =============================
-    TOKEN = "SEU_TOKEN_AQUI"
-    PHONE_ID = "SEU_PHONE_ID_AQUI"
-
-    url = f"https://graph.facebook.com/v18.0/{PHONE_ID}/messages"
-
-    headers = {
-        "Authorization": f"Bearer {TOKEN}",
-        "Content-Type": "application/json"
-    }
-
-    mensagem = f"""
-Olá {cliente}!
-Seu serviço ({servico}) foi registrado.
-Valor: R$ {valor:.2f}
-Street Car 🚗
-"""
-
-    data_api = {
-        "messaging_product": "whatsapp",
-        "to": numero,
-        "type": "text",
-        "text": {"body": mensagem}
-    }
-
-    try:
-        requests.post(url, headers=headers, json=data_api)
-    except:
-        pass
-
-    return redirect("/")
-
-# =============================
-# EXCLUIR
-# =============================
-@app.route("/excluir/<int:id>")
-def excluir(id):
-    conn = sqlite3.connect("streetcar.db")
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM servicos WHERE id = ?", (id,))
-    conn.commit()
-    conn.close()
-    return redirect("/")
-
-# =============================
-# DASHBOARD
-# =============================
-@app.route("/dashboard")
-def dashboard():
-    conn = sqlite3.connect("streetcar.db")
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        SELECT data, SUM(valor)
-        FROM servicos
-        GROUP BY data
+        SELECT id, cliente, servico, data, hora, status
+        FROM agendamentos
     """)
-
     dados = cursor.fetchall()
+
+    cursor.close()
     conn.close()
 
-    datas = [d[0] for d in dados]
-    valores = [d[1] for d in dados]
+    eventos = []
 
-    return render_template("dashboard.html",
-                           datas=datas,
-                           valores=valores)
+    for d in dados:
+        eventos.append({
+            "id": d[0],
+            "title": f"{d[1]} - {d[2]}",
+            "start": f"{d[3]}T{d[4]}",
+            "color": "green" if d[5] == "Concluído" else "orange"
+        })
+
+    return render_template("agenda.html", eventos=eventos)
 
 # =============================
-# RELATÓRIO PDF
+# CONCLUIR
 # =============================
-@app.route("/relatorio_pdf")
-def relatorio_pdf():
-    conn = sqlite3.connect("streetcar.db")
+@app.route("/concluir/<int:id>")
+def concluir(id):
+    conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM servicos")
-    dados = cursor.fetchall()
+
+    cursor.execute("""
+        SELECT cliente, veiculo, servico, valor
+        FROM agendamentos
+        WHERE id = %s
+    """, (id,))
+    dados = cursor.fetchone()
+
+    if dados:
+        cliente, veiculo, servico, valor = dados
+        data = datetime.now().strftime("%d/%m/%Y")
+
+        cursor.execute("""
+            INSERT INTO servicos
+            (cliente, veiculo, servico, data, valor)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (cliente, veiculo, servico, data, valor))
+
+        cursor.execute("""
+            UPDATE agendamentos
+            SET status = 'Concluído'
+            WHERE id = %s
+        """, (id,))
+
+        conn.commit()
+
+    cursor.close()
     conn.close()
 
-    pdf = SimpleDocTemplate("static/relatorio.pdf")
-    elementos = []
-    estilos = getSampleStyleSheet()
-
-    elementos.append(Paragraph("Relatório Street Car", estilos["Title"]))
-    elementos.append(Spacer(1, 0.5 * inch))
-
-    tabela_dados = [["ID", "Cliente", "Veículo", "Serviço", "Data", "Valor"]]
-
-    for s in dados:
-        tabela_dados.append([
-            s[0], s[1], s[2], s[3], s[4], f"R$ {s[5]:.2f}"
-        ])
-
-    tabela = Table(tabela_dados)
-    elementos.append(tabela)
-
-    pdf.build(elementos)
-
-    return redirect("/static/relatorio.pdf")
+    return redirect("/agenda")
 
 if __name__ == "__main__":
     app.run(debug=True)
