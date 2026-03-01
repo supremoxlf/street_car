@@ -9,7 +9,7 @@ app = Flask(__name__)
 app.secret_key = "super_secret_key"
 
 # =============================
-# CONEXÃO POSTGRESQL
+# CONEXÃO POSTGRESQL (RENDER)
 # =============================
 DATABASE_URL = os.environ.get("DATABASE_URL")
 url = urlparse(DATABASE_URL)
@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS agendamentos (
 conn.commit()
 
 # =============================
-# REGISTRAR USUÁRIO
+# REGISTRAR
 # =============================
 @app.route("/registrar", methods=["GET", "POST"])
 def registrar():
@@ -80,10 +80,7 @@ def registrar():
 
         conn.commit()
 
-        return """
-        Usuário criado com sucesso! <br><br>
-        <a href="/login">Ir para Login</a>
-        """
+        return "<h3>Usuário criado!</h3><a href='/login'>Ir para login</a>"
 
     return """
     <h2>Criar Usuário</h2>
@@ -93,8 +90,9 @@ def registrar():
         <button type="submit">Criar</button>
     </form>
     """
+
 # =============================
-# login
+# LOGIN
 # =============================
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -115,10 +113,7 @@ def login():
             session["usuario"] = usuario
             return redirect("/")
         else:
-            return """
-            Login inválido! <br><br>
-            <a href="/login">Tentar novamente</a>
-            """
+            return "Login inválido"
 
     return """
     <h2>Login</h2>
@@ -128,8 +123,17 @@ def login():
         <button type="submit">Entrar</button>
     </form>
     """
+
 # =============================
-# client
+# LOGOUT
+# =============================
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect("/login")
+
+# =============================
+# HOME
 # =============================
 @app.route("/")
 def index():
@@ -142,18 +146,9 @@ def index():
     cursor.execute("SELECT SUM(valor) FROM servicos")
     faturamento = cursor.fetchone()[0] or 0
 
-    cursor.execute("""
-        SELECT cliente, COUNT(*) 
-        FROM servicos
-        GROUP BY cliente
-        ORDER BY COUNT(*) DESC
-    """)
-    ranking = cursor.fetchall()
-
     return render_template("index.html",
                            servicos=servicos,
-                           faturamento=faturamento,
-                           ranking=ranking)
+                           faturamento=faturamento)
 
 # =============================
 # AGENDAR
@@ -167,9 +162,9 @@ def agendar():
         cliente = request.form["cliente"]
         veiculo = request.form["veiculo"]
         servico = request.form["servico"]
+        valor = float(request.form["valor"])
         data = request.form["data"]
         hora = request.form["hora"]
-        valor = float(request.form["valor"])
 
         cursor.execute("""
             INSERT INTO agendamentos
@@ -183,7 +178,7 @@ def agendar():
     return render_template("agendar.html")
 
 # =============================
-# AGENDA VISUAL
+# AGENDA (FULLCALENDAR)
 # =============================
 @app.route("/agenda")
 def agenda():
@@ -191,13 +186,22 @@ def agenda():
         return redirect("/login")
 
     cursor.execute("""
-        SELECT * FROM agendamentos
-        ORDER BY data, hora
+        SELECT id, cliente, servico, data, hora, status
+        FROM agendamentos
     """)
-    agendamentos = cursor.fetchall()
+    dados = cursor.fetchall()
 
-    return render_template("agenda.html",
-                           agendamentos=agendamentos)
+    eventos = []
+
+    for d in dados:
+        eventos.append({
+            "id": d[0],
+            "title": f"{d[1]} - {d[2]}",
+            "start": f"{d[3]}T{d[4]}",
+            "color": "green" if d[5] == "Concluído" else "orange"
+        })
+
+    return render_template("agenda.html", eventos=eventos)
 
 # =============================
 # CONCLUIR SERVIÇO
@@ -216,10 +220,8 @@ def concluir(id):
 
     if dados:
         cliente, veiculo, servico, valor = dados
-
         data = datetime.now().strftime("%d/%m/%Y")
 
-        # vira faturamento automático
         cursor.execute("""
             INSERT INTO servicos
             (cliente, veiculo, servico, data, valor)
