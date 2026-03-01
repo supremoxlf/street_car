@@ -84,18 +84,30 @@ def index():
         conn.commit()
 
     # BUSCAR SERVIÇOS
+    cursor.execute("""
+                   SELECT s.*,
+                          (SELECT COUNT(*) FROM servicos WHERE cliente = s.cliente) as total_cliente
+                   FROM servicos s
+                   ORDER BY id DESC
+                   """)
+    servicos = cursor.fetchall()
+@app.route("/faturamento")
+def faturamento():
+    conn = get_connection()
+    cursor = conn.cursor()
+
     cursor.execute("SELECT * FROM servicos ORDER BY id DESC")
     servicos = cursor.fetchall()
 
     cursor.execute("SELECT COALESCE(SUM(valor),0) FROM servicos")
-    faturamento = cursor.fetchone()[0]
+    total = cursor.fetchone()[0]
 
     cursor.close()
     conn.close()
 
-    return render_template("index.html",
+    return render_template("faturamento.html",
                            servicos=servicos,
-                           faturamento=faturamento)
+                           total=total)
 # =============================
 # AGENDAR
 # =============================
