@@ -58,11 +58,32 @@ conn.close()
 # =============================
 # HOME
 # =============================
-@app.route("/")
+@app.route("/", methods=["GET", "POST"])
 def index():
     conn = get_connection()
     cursor = conn.cursor()
 
+    # SE CLICAR EM ADICIONAR
+    if request.method == "POST":
+        cliente = request.form.get("cliente")
+        veiculo = request.form.get("veiculo")
+        servico = request.form.get("servico")
+        valor = request.form.get("valor")
+
+        if not valor:
+            valor = 0
+
+        data = datetime.now().strftime("%d/%m/%Y")
+
+        cursor.execute("""
+            INSERT INTO servicos
+            (cliente, veiculo, servico, data, valor)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (cliente, veiculo, servico, data, float(valor)))
+
+        conn.commit()
+
+    # BUSCAR SERVIÇOS
     cursor.execute("SELECT * FROM servicos ORDER BY id DESC")
     servicos = cursor.fetchall()
 
@@ -75,7 +96,6 @@ def index():
     return render_template("index.html",
                            servicos=servicos,
                            faturamento=faturamento)
-
 # =============================
 # AGENDAR
 # =============================
