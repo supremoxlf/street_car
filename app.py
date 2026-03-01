@@ -25,16 +25,34 @@ conn = psycopg2.connect(
 cursor = conn.cursor()
 
 # =============================
-# CRIAR TABELAS
+# CRIAR TABELA USUARIOS
 # =============================
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS usuarios (
     id SERIAL PRIMARY KEY,
-    usuario TEXT UNIQUE,
-    senha TEXT
+    usuario TEXT UNIQUE NOT NULL,
+    senha TEXT NOT NULL
 )
 """)
 
+conn.commit()
+
+# =============================
+# CRIAR ADMIN PADRÃO
+# =============================
+senha_hash = generate_password_hash("1234")
+
+cursor.execute("""
+INSERT INTO usuarios (usuario, senha)
+VALUES (%s, %s)
+ON CONFLICT (usuario) DO NOTHING
+""", ("admin", senha_hash))
+
+conn.commit()
+
+# =============================
+# CRIAR OUTRAS TABELAS
+# =============================
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS servicos (
     id SERIAL PRIMARY KEY,
@@ -60,36 +78,6 @@ CREATE TABLE IF NOT EXISTS agendamentos (
 """)
 
 conn.commit()
-
-# =============================
-# REGISTRAR
-# =============================
-@app.route("/registrar", methods=["GET", "POST"])
-def registrar():
-    if request.method == "POST":
-        usuario = request.form["usuario"]
-        senha = request.form["senha"]
-
-        senha_hash = generate_password_hash(senha)
-
-        cursor.execute("""
-            INSERT INTO usuarios (usuario, senha)
-            VALUES (%s, %s)
-            ON CONFLICT (usuario) DO NOTHING
-        """, (usuario, senha_hash))
-
-        conn.commit()
-
-        return "<h3>Usuário criado!</h3><a href='/login'>Ir para login</a>"
-
-    return """
-    <h2>Criar Usuário</h2>
-    <form method="POST">
-        Usuário: <input name="usuario" required><br><br>
-        Senha: <input type="password" name="senha" required><br><br>
-        <button type="submit">Criar</button>
-    </form>
-    """
 
 # =============================
 # LOGIN
@@ -131,6 +119,36 @@ def login():
 def logout():
     session.clear()
     return redirect("/login")
+
+# =============================
+# REGISTRAR (opcional)
+# =============================
+@app.route("/registrar", methods=["GET", "POST"])
+def registrar():
+    if request.method == "POST":
+        usuario = request.form["usuario"]
+        senha = request.form["senha"]
+
+        senha_hash = generate_password_hash(senha)
+
+        cursor.execute("""
+            INSERT INTO usuarios (usuario, senha)
+            VALUES (%s, %s)
+            ON CONFLICT (usuario) DO NOTHING
+        """, (usuario, senha_hash))
+
+        conn.commit()
+
+        return "<h3>Usuário criado!</h3><a href='/login'>Ir para login</a>"
+
+    return """
+    <h2>Criar Usuário</h2>
+    <form method="POST">
+        Usuário: <input name="usuario" required><br><br>
+        Senha: <input type="password" name="senha" required><br><br>
+        <button type="submit">Criar</button>
+    </form>
+    """
 
 # =============================
 # HOME
@@ -178,7 +196,7 @@ def agendar():
     return render_template("agendar.html")
 
 # =============================
-# AGENDA (FULLCALENDAR)
+# AGENDA
 # =============================
 @app.route("/agenda")
 def agenda():
@@ -204,7 +222,7 @@ def agenda():
     return render_template("agenda.html", eventos=eventos)
 
 # =============================
-# CONCLUIR SERVIÇO
+# CONCLUIR
 # =============================
 @app.route("/concluir/<int:id>")
 def concluir(id):
