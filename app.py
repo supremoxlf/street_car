@@ -63,7 +63,6 @@ def index():
     conn = get_connection()
     cursor = conn.cursor()
 
-    # SE CLICAR EM ADICIONAR
     if request.method == "POST":
         cliente = request.form.get("cliente")
         veiculo = request.form.get("veiculo")
@@ -82,6 +81,26 @@ def index():
         """, (cliente, veiculo, servico, data, float(valor)))
 
         conn.commit()
+
+    # 🔥 CONSULTA CORRETA COM TOTAL DO CLIENTE
+    cursor.execute("""
+        SELECT s.id, s.cliente, s.veiculo, s.servico, s.data, s.valor,
+        (SELECT COUNT(*) FROM servicos WHERE cliente = s.cliente)
+        FROM servicos s
+        ORDER BY s.id DESC
+    """)
+
+    servicos = cursor.fetchall()
+
+    cursor.execute("SELECT COALESCE(SUM(valor),0) FROM servicos")
+    faturamento = cursor.fetchone()[0]
+
+    cursor.close()
+    conn.close()
+
+    return render_template("index.html",
+                           servicos=servicos,
+                           faturamento=faturamento)
 
     # BUSCAR SERVIÇOS
     cursor.execute("""
