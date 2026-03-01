@@ -80,7 +80,10 @@ def registrar():
 
         conn.commit()
 
-        return "Usuário criado com sucesso! <br><a href='/login'>Ir para login</a>"
+        return """
+        Usuário criado com sucesso! <br><br>
+        <a href="/login">Ir para Login</a>
+        """
 
     return """
     <h2>Criar Usuário</h2>
@@ -91,7 +94,42 @@ def registrar():
     </form>
     """
 # =============================
-# PÁGINA PRINCIPAL
+# login
+# =============================
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        usuario = request.form["usuario"]
+        senha = request.form["senha"]
+
+        cursor.execute("""
+            SELECT id, usuario, senha
+            FROM usuarios
+            WHERE usuario = %s
+        """, (usuario,))
+
+        user = cursor.fetchone()
+
+        if user and check_password_hash(user[2], senha):
+            session["logado"] = True
+            session["usuario"] = usuario
+            return redirect("/")
+        else:
+            return """
+            Login inválido! <br><br>
+            <a href="/login">Tentar novamente</a>
+            """
+
+    return """
+    <h2>Login</h2>
+    <form method="POST">
+        Usuário: <input name="usuario" required><br><br>
+        Senha: <input type="password" name="senha" required><br><br>
+        <button type="submit">Entrar</button>
+    </form>
+    """
+# =============================
+# client
 # =============================
 @app.route("/")
 def index():
