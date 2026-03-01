@@ -1,5 +1,32 @@
 from flask import Flask, render_template, request, redirect
-import sqlite3
+import os
+import psycopg2
+from urllib.parse import urlparse
+
+DATABASE_URL = os.environ.get("DATABASE_URL")
+
+url = urlparse(DATABASE_URL)
+
+conn = psycopg2.connect(
+    database=url.path[1:],
+    user=url.username,
+    password=url.password,
+    host=url.hostname,
+    port=url.port
+)
+
+cursor = conn.cursor()
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS servicos (
+    id SERIAL PRIMARY KEY,
+    cliente TEXT,
+    veiculo TEXT,
+    servico TEXT,
+    data TEXT,
+    valor REAL
+)
+""")
+conn.commit()
 from datetime import datetime
 import requests
 
