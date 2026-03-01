@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2>📊 Dashboard</h2>
+<canvas id="grafico"></canvas>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+new Chart(document.getElementById('grafico'), {
+    type: 'bar',
+    data: {
+        labels: {{ datas|tojson }},
+        datasets: [{
+            label: 'Faturamento Diário',
+            data: {{ valores|tojson }},
+            borderWidth: 1
+        }]
+    }
+});
+</script>
+
+{% endblock %}
