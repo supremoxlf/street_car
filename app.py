@@ -62,32 +62,34 @@ CREATE TABLE IF NOT EXISTS agendamentos (
 conn.commit()
 
 # =============================
-# LOGIN
+# REGISTRAR USUÁRIO
 # =============================
-@app.route("/login", methods=["GET", "POST"])
-def login():
+@app.route("/registrar", methods=["GET", "POST"])
+def registrar():
     if request.method == "POST":
         usuario = request.form["usuario"]
         senha = request.form["senha"]
 
-        cursor.execute("SELECT * FROM usuarios WHERE usuario = %s", (usuario,))
-        user = cursor.fetchone()
+        senha_hash = generate_password_hash(senha)
 
-        if user and check_password_hash(user[2], senha):
-            session["logado"] = True
-            return redirect("/")
-        else:
-            return "Login inválido"
+        cursor.execute("""
+            INSERT INTO usuarios (usuario, senha)
+            VALUES (%s, %s)
+            ON CONFLICT (usuario) DO NOTHING
+        """, (usuario, senha_hash))
+
+        conn.commit()
+
+        return "Usuário criado com sucesso! <br><a href='/login'>Ir para login</a>"
 
     return """
-    <h2>Login</h2>
+    <h2>Criar Usuário</h2>
     <form method="POST">
-        Usuário: <input name="usuario"><br><br>
-        Senha: <input type="password" name="senha"><br><br>
-        <button type="submit">Entrar</button>
+        Usuário: <input name="usuario" required><br><br>
+        Senha: <input type="password" name="senha" required><br><br>
+        <button type="submit">Criar</button>
     </form>
     """
-
 # =============================
 # PÁGINA PRINCIPAL
 # =============================
