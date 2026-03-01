@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Agendar Serviço</title>
+</head>
+<body>
+
+<h2>Agendar Serviço</h2>
+
+<form method="POST">
+    Cliente: <input name="cliente" required><br><br>
+    Veículo: <input name="veiculo" required><br><br>
+    Serviço: <input name="servico" required><br><br>
+    Valor: <input name="valor" type="number" step="0.01" required><br><br>
+    Data: <input type="date" name="data" required><br><br>
+    Hora: <input type="time" name="hora" required><br><br>
+    <button type="submit">Agendar</button>
+</form>
+
+<br>
+<a href="/agenda">Ver Agenda</a>
+
+</body>
+</html>

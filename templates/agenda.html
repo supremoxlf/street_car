@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Agenda Street Car</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
+
+    <style>
+        body { font-family: Arial; padding: 20px; }
+        #calendar { max-width: 900px; margin: auto; }
+    </style>
+</head>
+<body>
+
+<h2>Agenda Street Car</h2>
+
+<div id="calendar"></div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+
+    var calendarEl = document.getElementById('calendar');
+
+    var calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'dayGridMonth',
+        locale: 'pt-br',
+        height: 650,
+        events: {{ eventos|tojson }},
+
+        eventClick: function(info) {
+            if(confirm("Concluir serviço?")) {
+                window.location.href = "/concluir/" + info.event.id;
+            }
+        }
+    });
+
+    calendar.render();
+});
+</script>
+
+<br>
+<a href="/agendar">Novo Agendamento</a>
+
+</body>
+</html>
